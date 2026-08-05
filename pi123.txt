@@ -1,19 +1,22 @@
+# fix the overwrite conflict
+sudo apt install -y -o Dpkg::Options::="--force-overwrite" raspberrypi-ui-mods
+
+# finish any half-installed packages
+sudo dpkg --configure -a
+sudo apt -f install -y
+
+# install login manager if needed
+sudo apt install -y lightdm
+
+# set graphical boot
+ls /lib/systemd/system/graphical.target
+sudo systemctl set-default graphical.target
+
+
+
+
 sudo raspi-config
 # System Options → Boot / Auto Login → Desktop Autologin
 
-
-
-
-
-cd ~/ServiceBin
-# update code if needed, then reinstall units:
-CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
-
-sudo systemctl daemon-reload
-sudo systemctl disable gratify-ads
 sudo systemctl enable gratify-ads
-
-# must show a symlink:
-ls -l /etc/systemd/system/graphical.target.wants/gratify-ads.service
-
 sudo reboot
