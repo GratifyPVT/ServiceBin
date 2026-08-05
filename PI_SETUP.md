@@ -111,6 +111,41 @@ sudo systemctl disable gratify-garbage gratify-ads gratify-waste gratify-update
 
 ---
 
+## Ads starts manually but NOT after reboot
+
+This happens when the desktop isn’t ready yet at boot, or the unit isn’t hooked to `graphical.target`.
+
+On the Pi:
+
+```bash
+cd ~/ServiceBin
+
+# pull latest unit files if you use git, OR copy from your PC, then:
+CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
+
+# force enable for graphical desktop boot
+sudo systemctl daemon-reload
+sudo systemctl disable gratify-ads
+sudo systemctl enable gratify-ads
+
+# confirm it is linked to graphical.target
+ls -l /etc/systemd/system/graphical.target.wants/gratify-ads.service
+
+# also enable desktop auto-login
+sudo raspi-config
+# System Options → Boot / Auto Login → Desktop Autologin
+
+sudo reboot
+```
+
+After reboot, check:
+
+```bash
+sudo systemctl status gratify-ads --no-pager
+```
+
+---
+
 ## If home screen only (ads not opening)
 
 From status photo, typical meanings:

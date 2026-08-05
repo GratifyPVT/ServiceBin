@@ -1,6 +1,7 @@
 [Unit]
 Description=Gratify Ads Management (video player + API sync)
-After=network-online.target graphical.target gratify-update.service
+# Start only after desktop/display manager is up (needed for mpv on Pi)
+After=network-online.target display-manager.service graphical.target gratify-update.service
 Wants=network-online.target graphical.target gratify-update.service
 StartLimitIntervalSec=0
 
@@ -12,11 +13,15 @@ WorkingDirectory=@GRATIFY_HOME@
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/@GRATIFY_USER@/.Xauthority
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 60 60
+# Wait for GUI socket; then short extra settle time for login session
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 90 180
+ExecStartPre=/bin/sleep 10
 ExecStart=@CONDA_PYTHON@ -m AdsManagement.service
+KillMode=control-group
 Restart=always
 RestartSec=10
-TimeoutStartSec=180
+TimeoutStopSec=15
+TimeoutStartSec=360
 
 [Install]
 WantedBy=graphical.target

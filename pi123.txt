@@ -1,14 +1,19 @@
-source ~/gratify-venv/bin/activate
+sudo raspi-config
+# System Options → Boot / Auto Login → Desktop Autologin
+
+
+
+
+
 cd ~/ServiceBin
-pip install requests
-pip install -r requirements.txt
+# update code if needed, then reinstall units:
+CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
 
-sudo systemctl restart gratify-waste
-sudo systemctl status gratify-waste --no-pager
+sudo systemctl daemon-reload
+sudo systemctl disable gratify-ads
+sudo systemctl enable gratify-ads
 
+# must show a symlink:
+ls -l /etc/systemd/system/graphical.target.wants/gratify-ads.service
 
-
-
-
-sudo systemctl restart gratify-ads
-sudo systemctl status gratify-ads --no-pagerS
+sudo reboot

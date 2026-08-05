@@ -33,7 +33,12 @@ serial_ready() {
 }
 
 display_ready() {
-  [[ -S /tmp/.X11-unix/X0 ]] || [[ -S /tmp/.X11-unix/X1 ]]
+  # X11 socket or Wayland display for the graphical session
+  [[ -S /tmp/.X11-unix/X0 ]] \
+    || [[ -S /tmp/.X11-unix/X1 ]] \
+    || [[ -n "${WAYLAND_DISPLAY:-}" ]] \
+    || [[ -S /run/user/$(id -u)/wayland-0 ]] \
+    || compgen -G "/run/user/*/wayland-0" > /dev/null
 }
 
 wait_for "$INTERNET_WAIT" "Waiting for internet" internet_ready || {

@@ -270,6 +270,18 @@ def _player_loop():
 
 
 def main():
+    import atexit
+    import signal
+
+    def _shutdown(*_args):
+        print("Ads service stopping...")
+        _stop_mpv()
+        raise SystemExit(0)
+
+    atexit.register(_stop_mpv)
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
     print("Ads Service Started")
     print(f"Video dir: {VIDEO_DIR}")
     print(f"Checking ads on start; polling API every {POLL_INTERVAL // 60} min\n")
