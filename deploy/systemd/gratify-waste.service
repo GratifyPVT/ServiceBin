@@ -9,11 +9,12 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh waste 180 30
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh waste 60 0
 ExecStart=@CONDA_PYTHON@ -m WasteManagement.uploader
 Restart=always
-RestartSec=15
-TimeoutStartSec=300
+RestartSec=10
+TimeoutStartSec=120
 
 [Install]
 WantedBy=multi-user.target

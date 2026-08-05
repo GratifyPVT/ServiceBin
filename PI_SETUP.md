@@ -1,23 +1,11 @@
-# Raspberry Pi Setup Guide
+# Raspberry Pi Setup Guide (working)
 
-## Important
-
-- Do **not** use old Continuum Miniconda (Python 3.4). It will fail with `conda: command not found`.
-- Modern conda does **not** support 32-bit Pi OS (`armv7l`).
-- Prefer **64-bit Raspberry Pi OS** + Miniforge.
-- If you must stay on 32-bit, skip conda and use `venv`.
-
-Check your OS:
-
-```bash
-uname -m
-# aarch64 = 64-bit  → use Section A
-# armv7l  = 32-bit  → use Section B
-```
+Use this on **32-bit Raspberry Pi OS** (`armv7l`).  
+Do **not** install old Miniconda — it breaks with `conda: command not found`.
 
 ---
 
-## Remove broken old Miniconda (if installed)
+## 0. Remove broken old Miniconda (if present)
 
 ```bash
 rm -rf ~/miniconda3
@@ -25,105 +13,23 @@ rm -rf ~/miniconda3
 
 ---
 
-## Section A — 64-bit OS (`aarch64`) — recommended
-
-### 1. System packages
-
-```bash
-sudo apt update
-sudo apt install -y git mpv python3-pip
-```
-
-### 2. Install Miniforge (conda)
-
-```bash
-cd ~
-wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh -O miniforge.sh
-bash miniforge.sh -b -p $HOME/miniforge3
-source $HOME/miniforge3/etc/profile.d/conda.sh
-conda init bash
-source ~/.bashrc
-conda --version
-```
-
-If `conda: command not found`:
-
-```bash
-source $HOME/miniforge3/etc/profile.d/conda.sh
-```
-
-### 3. Create env
-
-```bash
-conda create -n mf python=3.11 -y
-conda activate mf
-```
-
-### 4. Clone repo
-
-```bash
-cd ~
-git clone https://github.com/GratifyPVT/ServiceBin.git
-cd ServiceBin
-```
-
-Private repo:
-
-```bash
-git clone git@github.com:GratifyPVT/ServiceBin.git
-cd ServiceBin
-```
-
-### 5. Install Python deps
-
-```bash
-conda activate mf
-cd ~/ServiceBin
-pip install -r requirements.txt
-```
-
-### 6. Camera / serial permissions
-
-```bash
-sudo usermod -aG video,dialout $USER
-```
-
-Log out and back in (or reboot).
-
-### 7. Enable services on reboot
-
-```bash
-conda activate mf
-cd ~/ServiceBin
-bash deploy/install-services.sh
-```
-
-If conda is Miniforge and the script can’t find `mf`, set the python path:
-
-```bash
-CONDA_PYTHON=$HOME/miniforge3/envs/mf/bin/python bash deploy/install-services.sh
-```
-
-### 8. Check
-
-```bash
-sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste
-```
-
----
-
-## Section B — 32-bit OS (`armv7l`) — no conda
-
-Use system Python + venv.
-
-### 1. System packages
+## 1. System packages
 
 ```bash
 sudo apt update
 sudo apt install -y git mpv python3 python3-pip python3-venv
 ```
 
-### 2. Clone repo
+---
+
+## 2. Go to the project (already cloned)
+
+```bash
+cd ~/ServiceBin
+# if your folder name/path is different, cd there instead
+```
+
+If not cloned yet:
 
 ```bash
 cd ~
@@ -131,35 +37,58 @@ git clone https://github.com/GratifyPVT/ServiceBin.git
 cd ServiceBin
 ```
 
-### 3. Create venv + install deps
+---
+
+## 3. Create venv + install Python deps
 
 ```bash
 python3 -m venv ~/gratify-venv
 source ~/gratify-venv/bin/activate
 pip install -U pip
-cd ~/ServiceBin
 pip install -r requirements.txt
 ```
 
-### 4. Camera / serial permissions
+Later sessions, activate with:
+
+```bash
+source ~/gratify-venv/bin/activate
+cd ~/ServiceBin
+```
+
+---
+
+## 4. Camera / serial permissions
 
 ```bash
 sudo usermod -aG video,dialout $USER
 ```
 
-Log out and back in (or reboot).
+Then **log out and log back in** (or reboot).
 
-### 5. Enable services on reboot
+---
+
+## 5. Enable services on reboot
 
 ```bash
 cd ~/ServiceBin
 CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
 ```
 
-### 6. Check
+---
+
+## 6. Check services
 
 ```bash
 sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste
+```
+
+Logs:
+
+```bash
+journalctl -u gratify-garbage -f
+journalctl -u gratify-ads -f
+journalctl -u gratify-waste -f
+journalctl -u gratify-update -f
 ```
 
 ---
@@ -173,11 +102,46 @@ sudo systemctl disable gratify-garbage gratify-ads gratify-waste gratify-update
 
 ---
 
-## Logs
+## Notes
+
+- Python path used by systemd: `~/gratify-venv/bin/python`
+- Ads need `mpv` installed via apt
+- Waste uploader runs when image count is more than 8
+- GitHub update service pulls only if remote has new commits
+
+---
+
+## If home screen only (ads not opening)
+
+From status photo, typical meanings:
+
+- `gratify-ads` **inactive (dead)** → ads never started (nothing on screen)
+- `gratify-garbage` **activating (start-pre)** → waiting for Arduino serial (up to ~15–90s)
+- `gratify-waste` **auto-restart / exit-code** → Python uploader crashed
+
+### Fix now on the Pi
 
 ```bash
-journalctl -u gratify-garbage -f
-journalctl -u gratify-ads -f
-journalctl -u gratify-waste -f
-journalctl -u gratify-update -f
+# see exact errors
+journalctl -u gratify-ads -n 50 --no-pager
+journalctl -u gratify-waste -n 50 --no-pager
+
+# make sure deps + mpv exist
+source ~/gratify-venv/bin/activate
+pip install -r ~/ServiceBin/requirements.txt
+which mpv
+
+# ensure a video exists (or wait for API download)
+ls ~/ServiceBin/AdsManagement/videos/
+
+# restart after desktop is visible
+sudo systemctl restart gratify-ads gratify-waste gratify-garbage
+sudo systemctl status gratify-ads gratify-waste gratify-garbage --no-pager
+```
+
+Enable desktop auto-login so ads can use the screen after reboot:
+
+```bash
+sudo raspi-config
+# System Options → Auto Login → Desktop
 ```

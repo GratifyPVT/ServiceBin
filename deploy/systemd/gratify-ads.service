@@ -11,11 +11,12 @@ Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/@GRATIFY_USER@/.Xauthority
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 180 120
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 60 60
 ExecStart=@CONDA_PYTHON@ -m AdsManagement.service
 Restart=always
-RestartSec=15
-TimeoutStartSec=360
+RestartSec=10
+TimeoutStartSec=180
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target

@@ -9,11 +9,12 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh garbage 180 90
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh garbage 60 15
 ExecStart=@CONDA_PYTHON@ -m GarbageDetection.main
 Restart=always
-RestartSec=15
-TimeoutStartSec=300
+RestartSec=10
+TimeoutStartSec=120
 SupplementaryGroups=dialout video
 
 [Install]

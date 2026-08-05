@@ -26,7 +26,10 @@ internet_ready() {
 }
 
 serial_ready() {
-  compgen -G "/dev/ttyUSB*" > /dev/null || compgen -G "/dev/serial0" > /dev/null
+  compgen -G "/dev/ttyUSB*" > /dev/null \
+    || compgen -G "/dev/ttyACM*" > /dev/null \
+    || compgen -G "/dev/serial0" > /dev/null \
+    || [[ -e /dev/serial0 ]]
 }
 
 display_ready() {

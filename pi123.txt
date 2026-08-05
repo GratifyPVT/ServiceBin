@@ -1,0 +1,17 @@
+# 1) See the real errors
+journalctl -u gratify-ads -n 50 --no-pager
+journalctl -u gratify-waste -n 50 --no-pager
+
+# 2) Fix deps + mpv
+source ~/gratify-venv/bin/activate
+cd ~/ServiceBin
+pip install -r requirements.txt
+sudo apt install -y mpv
+
+# 3) Check videos
+ls ~/ServiceBin/AdsManagement/videos/
+
+# 4) Start ads after desktop is open
+sudo systemctl restart gratify-ads
+sudo systemctl restart gratify-waste
+sudo systemctl status gratify-ads --no-pager
