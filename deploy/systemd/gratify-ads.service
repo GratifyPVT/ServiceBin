@@ -1,0 +1,21 @@
+[Unit]
+Description=Gratify Ads Management (video player + API sync)
+After=network-online.target graphical.target
+Wants=network-online.target graphical.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@GRATIFY_USER@
+Group=@GRATIFY_USER@
+WorkingDirectory=@GRATIFY_HOME@
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/@GRATIFY_USER@/.Xauthority
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 180 120
+ExecStart=@CONDA_PYTHON@ -m AdsManagement.service
+Restart=always
+RestartSec=15
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target
