@@ -1,74 +1,65 @@
 # Raspberry Pi Setup Guide
 
-Commands to install everything and enable Gratify services on reboot.
+## Important
+
+- Do **not** use old Continuum Miniconda (Python 3.4). It will fail with `conda: command not found`.
+- Modern conda does **not** support 32-bit Pi OS (`armv7l`).
+- Prefer **64-bit Raspberry Pi OS** + Miniforge.
+- If you must stay on 32-bit, skip conda and use `venv`.
+
+Check your OS:
+
+```bash
+uname -m
+# aarch64 = 64-bit  → use Section A
+# armv7l  = 32-bit  → use Section B
+```
 
 ---
 
-## 1. System packages
+## Remove broken old Miniconda (if installed)
+
+```bash
+rm -rf ~/miniconda3
+```
+
+---
+
+## Section A — 64-bit OS (`aarch64`) — recommended
+
+### 1. System packages
 
 ```bash
 sudo apt update
 sudo apt install -y git mpv python3-pip
 ```
 
----
-
-## 2. Check CPU architecture
-
-```bash
-uname -m
-```
-
-- `aarch64` → use **64-bit** Miniconda below  
-- `armv7l` → use **32-bit** Miniconda below  
-
----
-
-## 3. Install Miniconda (conda)
-
-### 64-bit (`aarch64`)
+### 2. Install Miniforge (conda)
 
 ```bash
 cd ~
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh -O miniconda.sh
-bash miniconda.sh -b -p $HOME/miniconda3
-source $HOME/miniconda3/etc/profile.d/conda.sh
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh -O miniforge.sh
+bash miniforge.sh -b -p $HOME/miniforge3
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda init bash
 source ~/.bashrc
 conda --version
 ```
 
-### 32-bit (`armv7l`)
+If `conda: command not found`:
 
 ```bash
-cd ~
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-armv7l.sh -O miniconda.sh
-bash miniconda.sh -b -p $HOME/miniconda3
-source $HOME/miniconda3/etc/profile.d/conda.sh
-conda init bash
-source ~/.bashrc
-conda --version
+source $HOME/miniforge3/etc/profile.d/conda.sh
 ```
 
-### Accept Terms of Service (if asked)
-
-```bash
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-```
-
----
-
-## 4. Create conda env
+### 3. Create env
 
 ```bash
 conda create -n mf python=3.11 -y
 conda activate mf
 ```
 
----
-
-## 5. Clone the repo
+### 4. Clone repo
 
 ```bash
 cd ~
@@ -76,16 +67,14 @@ git clone https://github.com/GratifyPVT/ServiceBin.git
 cd ServiceBin
 ```
 
-Private repo (SSH):
+Private repo:
 
 ```bash
 git clone git@github.com:GratifyPVT/ServiceBin.git
 cd ServiceBin
 ```
 
----
-
-## 6. Install Python dependencies
+### 5. Install Python deps
 
 ```bash
 conda activate mf
@@ -93,27 +82,15 @@ cd ~/ServiceBin
 pip install -r requirements.txt
 ```
 
----
-
-## 7. Camera / serial permissions
+### 6. Camera / serial permissions
 
 ```bash
 sudo usermod -aG video,dialout $USER
 ```
 
-Log out and log back in (or reboot) so group changes apply.
+Log out and back in (or reboot).
 
-Enable camera if needed:
-
-```bash
-sudo raspi-config
-```
-
-Interface Options → Camera → Enable
-
----
-
-## 8. Enable services on reboot
+### 7. Enable services on reboot
 
 ```bash
 conda activate mf
@@ -121,32 +98,73 @@ cd ~/ServiceBin
 bash deploy/install-services.sh
 ```
 
-If your conda env is not named `mf`:
+If conda is Miniforge and the script can’t find `mf`, set the python path:
 
 ```bash
-CONDA_ENV_NAME=your_env_name bash deploy/install-services.sh
+CONDA_PYTHON=$HOME/miniforge3/envs/mf/bin/python bash deploy/install-services.sh
 ```
 
----
-
-## 9. Check services
+### 8. Check
 
 ```bash
 sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste
 ```
 
-Follow logs:
+---
+
+## Section B — 32-bit OS (`armv7l`) — no conda
+
+Use system Python + venv.
+
+### 1. System packages
 
 ```bash
-journalctl -u gratify-garbage -f
-journalctl -u gratify-ads -f
-journalctl -u gratify-waste -f
-journalctl -u gratify-update -f
+sudo apt update
+sudo apt install -y git mpv python3 python3-pip python3-venv
+```
+
+### 2. Clone repo
+
+```bash
+cd ~
+git clone https://github.com/GratifyPVT/ServiceBin.git
+cd ServiceBin
+```
+
+### 3. Create venv + install deps
+
+```bash
+python3 -m venv ~/gratify-venv
+source ~/gratify-venv/bin/activate
+pip install -U pip
+cd ~/ServiceBin
+pip install -r requirements.txt
+```
+
+### 4. Camera / serial permissions
+
+```bash
+sudo usermod -aG video,dialout $USER
+```
+
+Log out and back in (or reboot).
+
+### 5. Enable services on reboot
+
+```bash
+cd ~/ServiceBin
+CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
+```
+
+### 6. Check
+
+```bash
+sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste
 ```
 
 ---
 
-## Stop / disable auto-start (optional)
+## Stop / disable auto-start
 
 ```bash
 sudo systemctl stop gratify-garbage gratify-ads gratify-waste gratify-update
@@ -155,9 +173,11 @@ sudo systemctl disable gratify-garbage gratify-ads gratify-waste gratify-update
 
 ---
 
-## Boot order
+## Logs
 
-1. `gratify-update` — pull from GitHub only if updates exist  
-2. `gratify-garbage` — waste detection + Arduino  
-3. `gratify-ads` — ad player (`mpv`)  
-4. `gratify-waste` — upload images when count &gt; 8  
+```bash
+journalctl -u gratify-garbage -f
+journalctl -u gratify-ads -f
+journalctl -u gratify-waste -f
+journalctl -u gratify-update -f
+```
