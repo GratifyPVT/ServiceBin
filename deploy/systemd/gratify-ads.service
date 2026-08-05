@@ -1,7 +1,7 @@
 [Unit]
 Description=Gratify Ads Management (video player + API sync)
-After=network-online.target graphical.target
-Wants=network-online.target graphical.target
+After=network-online.target graphical.target gratify-update.service
+Wants=network-online.target graphical.target gratify-update.service
 StartLimitIntervalSec=0
 
 [Service]

@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
-# Install Gratify systemd services so they start automatically on Pi boot.
-# Uses conda env tfenv (same as: conda activate tfenv).
+# Install Gratify systemd services so they start automatically on boot.
+# Uses conda env mf by default (override with CONDA_ENV_NAME=tfenv).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRATIFY_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRATIFY_USER="${SUDO_USER:-$(whoami)}"
-CONDA_ENV_NAME="${CONDA_ENV_NAME:-tfenv}"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-mf}"
 SYSTEMD_DIR="/etc/systemd/system"
+
+SERVICES=(
+  gratify-update.service
+  gratify-garbage.service
+  gratify-ads.service
+  gratify-waste.service
+)
 
 find_conda_python() {
   local user="$1"
@@ -51,14 +58,14 @@ fi
 
 if ! CONDA_PYTHON="$(find_conda_python "$GRATIFY_USER" "$CONDA_ENV_NAME")"; then
   echo "Error: conda env '$CONDA_ENV_NAME' not found for user $GRATIFY_USER"
-  echo "Create it first:  conda create -n tfenv python=3.11"
-  echo "Or set path manually:  CONDA_PYTHON=/path/to/tfenv/bin/python bash deploy/install-services.sh"
+  echo "Create it first:  conda create -n $CONDA_ENV_NAME python=3.12"
+  echo "Or set path manually:  CONDA_PYTHON=/path/to/env/bin/python bash deploy/install-services.sh"
   exit 1
 fi
 
 echo "Using conda python: $CONDA_PYTHON ($CONDA_ENV_NAME)"
 
-chmod +x "$GRATIFY_HOME/deploy/wait-for-boot.sh"
+chmod +x "$GRATIFY_HOME/deploy/wait-for-boot.sh" "$GRATIFY_HOME/deploy/update-from-github.sh"
 
 render() {
   local src="$1"
@@ -72,16 +79,18 @@ render() {
 
 echo "Installing services for user=$GRATIFY_USER home=$GRATIFY_HOME"
 
+render "$SCRIPT_DIR/systemd/gratify-update.service" "$SYSTEMD_DIR/gratify-update.service"
 render "$SCRIPT_DIR/systemd/gratify-garbage.service" "$SYSTEMD_DIR/gratify-garbage.service"
 render "$SCRIPT_DIR/systemd/gratify-ads.service" "$SYSTEMD_DIR/gratify-ads.service"
+render "$SCRIPT_DIR/systemd/gratify-waste.service" "$SYSTEMD_DIR/gratify-waste.service"
 
 systemctl daemon-reload
-systemctl enable gratify-garbage.service gratify-ads.service
-systemctl restart gratify-garbage.service gratify-ads.service
+systemctl enable "${SERVICES[@]}"
+systemctl restart gratify-update.service
+systemctl restart gratify-garbage.service gratify-ads.service gratify-waste.service
 
 echo ""
 echo "Done. Services enabled and started (conda env: $CONDA_ENV_NAME)."
-echo "  sudo systemctl status gratify-garbage"
-echo "  sudo systemctl status gratify-ads"
-echo "  journalctl -u gratify-garbage -f"
-echo "  journalctl -u gratify-ads -f"
+echo "Boot order: update-from-github → garbage + ads + waste"
+echo "  sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste"
+echo "  journalctl -u gratify-update -f"

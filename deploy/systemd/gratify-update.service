@@ -1,0 +1,17 @@
+[Unit]
+Description=Gratify update code from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=@GRATIFY_USER@
+Group=@GRATIFY_USER@
+WorkingDirectory=@GRATIFY_HOME@
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh update 120 0
+ExecStart=@GRATIFY_HOME@/deploy/update-from-github.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

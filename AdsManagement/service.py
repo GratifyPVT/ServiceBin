@@ -169,6 +169,7 @@ def _queue_update(videos):
     active = _active_videos()
 
     if target == active:
+        print("No new ads — skipping download.\n")
         return False
 
     print("New ads detected. Downloading while current ads keep playing...")
@@ -192,6 +193,7 @@ def _sync_once():
 
     videos = data.get("videos", [])
     if not videos:
+        print("API returned no videos — keeping current ads.\n")
         return
 
     _queue_update(videos)
@@ -226,11 +228,11 @@ def sync_and_apply():
 
 def _sync_worker():
     while True:
+        time.sleep(POLL_INTERVAL)
         try:
             _sync_once()
         except Exception as e:
             print("Sync error:", e)
-        time.sleep(POLL_INTERVAL)
 
 
 def _player_loop():
@@ -270,10 +272,10 @@ def _player_loop():
 def main():
     print("Ads Service Started")
     print(f"Video dir: {VIDEO_DIR}")
-    print(f"Polling API every {POLL_INTERVAL}s\n")
+    print(f"Checking ads on start; polling API every {POLL_INTERVAL // 60} min\n")
 
     threading.Thread(target=_sync_worker, daemon=True).start()
-    _sync_once()  # check immediately on startup
+    _sync_once()  # check for new ads on restart
     _player_loop()
 
 

@@ -1,4 +1,15 @@
+# Gratify Python deps (Raspberry Pi 3A + desktop)
+# System packages (Pi):  sudo apt install -y mpv git python3-pip
+# Create env:            conda create -n mf python=3.11 && conda activate mf
+# Install:               pip install -r requirements.txt
+
 numpy
 opencv-python-headless
 pyserial
+requests
+
+# Pi / ARM — use TFLite runtime only (Pi 3A has 512MB RAM; skip full TensorFlow)
 tflite-runtime; platform_machine == "aarch64" or platform_machine == "armv7l"
+
+# Desktop / x86 only — fallback when tflite-runtime has no wheel
+tensorflow; platform_machine == "x86_64" or platform_machine == "AMD64"

@@ -33,17 +33,30 @@ display_ready() {
   [[ -S /tmp/.X11-unix/X0 ]] || [[ -S /tmp/.X11-unix/X1 ]]
 }
 
-wait_for "$INTERNET_WAIT" "Waiting for internet" internet_ready
+wait_for "$INTERNET_WAIT" "Waiting for internet" internet_ready || {
+  echo "WARNING: internet not ready, continuing anyway"
+}
 
 case "$MODE" in
   garbage)
-    wait_for "$EXTRA_WAIT" "Waiting for Arduino serial port" serial_ready
+    if (( EXTRA_WAIT > 0 )); then
+      if ! wait_for "$EXTRA_WAIT" "Waiting for Arduino serial port" serial_ready; then
+        echo "WARNING: no serial port yet — GarbageDetection will use simulation if needed"
+      fi
+    fi
     ;;
   ads)
-    wait_for "$EXTRA_WAIT" "Waiting for desktop display" display_ready
+    if (( EXTRA_WAIT > 0 )); then
+      if ! wait_for "$EXTRA_WAIT" "Waiting for desktop display" display_ready; then
+        echo "WARNING: display not ready yet, continuing anyway"
+      fi
+    fi
+    ;;
+  waste|update)
+    # Only needs internet (already waited above)
     ;;
   *)
-    echo "Usage: $0 {garbage|ads} [internet_wait_sec] [extra_wait_sec]" >&2
+    echo "Usage: $0 {garbage|ads|waste|update} [internet_wait_sec] [extra_wait_sec]" >&2
     exit 1
     ;;
 esac

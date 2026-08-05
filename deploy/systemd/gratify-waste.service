@@ -1,5 +1,5 @@
 [Unit]
-Description=Gratify Garbage Detection (Arduino UART + ML)
+Description=Gratify Waste Management (image uploader)
 After=network-online.target gratify-update.service
 Wants=network-online.target gratify-update.service
 StartLimitIntervalSec=0
@@ -9,12 +9,11 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh garbage 180 90
-ExecStart=@CONDA_PYTHON@ -m GarbageDetection.main
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh waste 180 30
+ExecStart=@CONDA_PYTHON@ -m WasteManagement.uploader
 Restart=always
 RestartSec=15
 TimeoutStartSec=300
-SupplementaryGroups=dialout video
 
 [Install]
 WantedBy=multi-user.target
