@@ -1,39 +1,45 @@
-# ML ONLY — does NOT touch ads / ~/gratify-venv / gratify-ads
+# ML ONLY — ads stays on ~/gratify-venv (do not touch ads)
 # ============================================================
-# Why this works:
-# - Python 3.13 cannot install tflite on Pi (that was the old error)
-# - Python 3.11 CAN: tflite_runtime has linux_armv7l cp311 wheel
-# - Use a SEPARATE venv so ads keeps working on ~/gratify-venv
+# Your Pi OS Trixie has ONLY Python 3.13.
+# apt has NO python3.11 package.
+# Miniforge has NO 32-bit (armv7l) installer.
+#
+# Fix: download portable Python 3.11 for Pi armv7hf, then
+# install tflite-runtime into a SEPARATE ML venv.
 # ============================================================
 
-# 1) Need Python 3.11
-python3.11 -V
-# if missing:
-sudo apt update
-sudo apt install -y python3.11 python3.11-venv python3.11-dev
+# 1) Download portable CPython 3.11 (armv7 hard-float = Pi 3A+ 32-bit)
+cd ~
+curl -L -o python311.tar.gz \
+  "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.11.15%2B20260807-armv7-unknown-linux-gnueabihf-install_only.tar.gz"
 
-# 2) ML venv only (never delete ~/gratify-venv)
-python3.11 -m venv ~/gratify-ml-venv
+# 2) Extract (creates ~/python for this tarball layout — we move it)
+rm -rf ~/gratify-python311
+mkdir -p ~/gratify-python311
+tar -xzf python311.tar.gz -C ~/gratify-python311 --strip-components=1
+rm -f python311.tar.gz
+~/gratify-python311/bin/python3.11 -V
+# must show Python 3.11.x
+
+# 3) Create ML-only venv (never touch ~/gratify-venv)
+~/gratify-python311/bin/python3.11 -m venv ~/gratify-ml-venv
 source ~/gratify-ml-venv/bin/activate
 python -V
-# MUST show Python 3.11.x — if 3.13, STOP
+# must show Python 3.11.x — if 3.13, STOP
 
-# 3) Install ML packages (pin tflite that has armv7l wheel)
+# 4) Install ML packages
 pip install -U pip setuptools wheel
 pip install numpy opencv-python-headless pyserial requests
 pip install tflite-runtime==2.14.0
 
-# 4) Verify tflite
+# 5) Verify
 python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
-
-# 5) Verify ML code + model exist on this Pi
 cd ~/ServiceBin
-test -f GarbageDetection/main.py || { echo "MISSING GarbageDetection/main.py — copy/pull ML code first"; exit 1; }
-test -f GarbageDetection/model/rls_mobilenetv3_mish_cbam_float16.tflite || { echo "MISSING .tflite model"; exit 1; }
-ls -lh GarbageDetection/model/*.tflite
+test -f GarbageDetection/main.py || { echo "MISSING GarbageDetection/main.py"; exit 1; }
+test -f GarbageDetection/model/rls_mobilenetv3_mish_cbam_float16.tflite || { echo "MISSING model"; exit 1; }
 python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
 
-# 6) Change ONLY garbage service (ads unchanged)
+# 6) Point ONLY gratify-garbage at ML venv (ads unchanged)
 sudo mkdir -p /etc/systemd/system/gratify-garbage.service.d
 sudo tee /etc/systemd/system/gratify-garbage.service.d/override.conf >/dev/null <<EOF
 [Service]
@@ -45,7 +51,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart gratify-garbage
 sudo systemctl status gratify-garbage --no-pager
 
-# DO NOT run these (would affect ads):
+# DO NOT run:
 # install-services.sh
 # systemctl restart gratify-ads
 # rm -rf ~/gratify-venv
