@@ -1,10 +1,12 @@
-# Core packages only (ads + waste + camera helpers).
-# Safe on Raspberry Pi OS Trixie / Python 3.13 / armv7l.
+# Core packages (ads + waste work on system Python 3.13 venv too)
 requests
 numpy
-opencv-python-headless
 pyserial
+Pillow
 
-# ML: install tflite-runtime ONLY inside Python 3.9–3.11 (e.g. conda env mf).
-# Do NOT uncomment on system Python 3.13 — pip will fail and block everything:
-# tflite-runtime
+# Do NOT install opencv-python-headless on Pi OS Trixie —
+# pip wheels need old FFmpeg (LIBSWSCALE_6) and break with soname hacks.
+# ML camera uses system ffmpeg instead (see GarbageDetection/runtime.py).
+
+# ML only (Python 3.11 venv ~/gratify-ml-venv):
+#   pip install tflite-runtime==2.14.0

@@ -1,9 +1,11 @@
 import glob
 import os
 import queue
+import subprocess
 import threading
 import time
 
+import numpy as np
 import serial
 
 import config
@@ -11,13 +13,14 @@ import config
 # Prefer shared config (GRATIFY_SERIAL_PORT / /dev/serial0), then USB, then Pi UART
 DEFAULT_UART_PORT = config.SERIAL_PORT
 
-# Optional fallbacks if the default path is missing
 PI_UART_PORTS = ("/dev/serial0", "/dev/ttyAMA0", "/dev/ttyS0")
 CAMERA_CAPTURE_WAIT_SEC = 0.35
 UART_REPLY_MARGIN_SEC = 0.35
 UART_REPLY_TIMEOUT_SEC = float(
     os.environ.get("GRATIFY_UART_TIMEOUT", str(config.ARDUINO_PI_TIMEOUT_SEC))
 )
+CAMERA_WIDTH = 640
+CAMERA_HEIGHT = 480
 
 
 def _candidate_ports(preferred=None):
@@ -45,7 +48,7 @@ def find_serial_port():
 
 
 def pick_serial_port(preferred=None):
-    """Open the first usable serial port (defaults to /dev/ttyUSB0 on Pi)."""
+    """Open the first usable serial port."""
     errors = []
     for candidate in _candidate_ports(preferred):
         if not os.path.exists(candidate):
@@ -94,7 +97,6 @@ def open_serial(port=None, baud=None):
 
 
 def verify_serial_link(ser, timeout=3.0):
-    """Legacy helper used by debug tools."""
     print(f"UART ready on {ser.port}")
     return True
 
@@ -177,50 +179,65 @@ class SerialListener:
 
 
 class CameraBuffer:
-    """Keep the latest Pi camera frame ready so UART replies stay within 5s."""
+    """Keep latest webcam frame ready using system ffmpeg (no OpenCV)."""
 
     def __init__(self, device=0):
-        import cv2
+        if isinstance(device, int):
+            self._device = f"/dev/video{device}"
+        else:
+            self._device = str(device)
 
-        self._cv2 = cv2
-        self._device = device
-        self._cap = self._open_capture(device)
+        if not os.path.exists(self._device):
+            raise RuntimeError(f"Camera device missing: {self._device}")
+
+        self._w = CAMERA_WIDTH
+        self._h = CAMERA_HEIGHT
+        self._frame_nbytes = self._w * self._h * 3
+        self._proc = None
         self._lock = threading.Lock()
         self._latest = None
         self._frame_id = 0
         self._stop = threading.Event()
+        self._open_capture()
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
-        if not self._wait_for_frame(timeout=5.0):
-            raise RuntimeError(f"Camera {device} opened but no frames received")
+        if not self._wait_for_frame(timeout=8.0):
+            raise RuntimeError(f"Camera {self._device} opened but no frames received")
 
-    def _open_capture(self, device):
-        cap = None
-        for backend in (self._cv2.CAP_V4L2, self._cv2.CAP_ANY):
+    def _open_capture(self):
+        if self._proc is not None:
+            self._proc.kill()
             try:
-                cap = self._cv2.VideoCapture(device, backend)
+                self._proc.wait(timeout=2)
             except Exception:
-                cap = self._cv2.VideoCapture(device)
-            if cap is not None and cap.isOpened():
-                break
-            if cap is not None:
-                cap.release()
-            cap = None
+                pass
+            self._proc = None
 
-        if cap is None or not cap.isOpened():
-            raise RuntimeError(f"Camera {device} failed to open")
-
-        cap.set(self._cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(self._cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        try:
-            cap.set(self._cv2.CAP_PROP_BUFFERSIZE, 1)
-        except Exception:
-            pass
-
-        for _ in range(max(0, int(config.SERIAL_CAPTURE_FLUSH))):
-            cap.read()
-
-        return cap
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "v4l2",
+            "-video_size",
+            f"{self._w}x{self._h}",
+            "-i",
+            self._device,
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-an",
+            "-",
+        ]
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=self._frame_nbytes * 2,
+        )
+        print(f"Camera open via ffmpeg: {self._device} ({self._w}x{self._h})")
 
     def _wait_for_frame(self, timeout=2.0):
         end = time.time() + timeout
@@ -231,35 +248,46 @@ class CameraBuffer:
             time.sleep(0.05)
         return False
 
+    def _read_frame(self):
+        if self._proc is None or self._proc.stdout is None:
+            return None
+        buf = b""
+        while len(buf) < self._frame_nbytes:
+            chunk = self._proc.stdout.read(self._frame_nbytes - len(buf))
+            if not chunk:
+                return None
+            buf += chunk
+        return np.frombuffer(buf, dtype=np.uint8).reshape((self._h, self._w, 3)).copy()
+
     def _recover_capture(self):
         with self._lock:
-            if self._cap is not None:
-                self._cap.release()
             self._latest = None
-
         time.sleep(0.25)
-        self._cap = self._open_capture(self._device)
+        self._open_capture()
         print("Camera reopened after read failure")
 
     def _worker(self):
         failures = 0
+        # Discard a few frames (flush)
+        for _ in range(max(0, int(config.SERIAL_CAPTURE_FLUSH))):
+            self._read_frame()
+
         while not self._stop.is_set():
-            ret, frame = self._cap.read()
-            if ret:
+            frame = self._read_frame()
+            if frame is not None:
                 failures = 0
                 with self._lock:
-                    self._latest = frame.copy()
+                    self._latest = frame
                     self._frame_id += 1
             else:
                 failures += 1
-                if failures >= 20:
+                if failures >= 5:
                     failures = 0
                     try:
                         self._recover_capture()
                     except Exception as exc:
                         print("Camera recovery failed:", exc)
                         time.sleep(0.5)
-            time.sleep(0.005)
 
     def capture(self, max_wait=None):
         max_wait = max_wait if max_wait is not None else CAMERA_CAPTURE_WAIT_SEC
@@ -282,17 +310,20 @@ class CameraBuffer:
 
     def close(self):
         self._stop.set()
-        self._thread.join(timeout=1)
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+        if self._proc is not None:
+            self._proc.kill()
+            try:
+                self._proc.wait(timeout=2)
+            except Exception:
+                pass
+            self._proc = None
 
 
 def warmup_classifier(predict_fn):
     """First TFLite invoke is slower; run before CAPTURE arrives on UART."""
-    import numpy as np
-
-    dummy = np.zeros((480, 640, 3), dtype=np.uint8)
+    dummy = np.zeros((CAMERA_HEIGHT, CAMERA_WIDTH, 3), dtype=np.uint8)
     predict_fn(dummy)
     print("Model warmup done")
 

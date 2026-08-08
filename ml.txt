@@ -1,72 +1,48 @@
 # ============================================================
-# 1) SYSTEM LIBS FOR OPENCV (Trixie / Pi 3A+)
+# ML FIX (Trixie) — remove broken OpenCV, use Pillow + ffmpeg
+# Does NOT touch ads / ~/gratify-venv
 # ============================================================
-sudo apt update
 
-# BLAS (already mostly installed)
-sudo apt install -y libopenblas0 libblas3 liblapack3 libgomp1 libgfortran5 || true
-
-# FFmpeg / OpenCV shared libs (fixes libavcodec.so.59 etc.)
-sudo apt install -y ffmpeg \
-  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
-  libavcodec61 libavformat61 libavutil59 libswscale8 libswresample5 \
-  libavcodec60 libavformat60 libavutil58 libswscale7 libswresample4 \
-  2>/dev/null || true
-
-# glib replacement on Trixie
-sudo apt install -y libglib2.0-0t64 libatomic1 libgl1 || true
-sudo apt install -y libglib2.0-0 || true
-
+# 1) Undo bad FFmpeg symlinks from earlier attempts
 ARCH_LIB="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo arm-linux-gnueabihf)"
-
-# Link BLAS if needed
-CBLAS="$(find /usr/lib/$ARCH_LIB -name 'libcblas.so.3' 2>/dev/null | head -n 1)"
-OB="$(find /usr/lib/$ARCH_LIB -name 'libopenblas.so.0' 2>/dev/null | head -n 1)"
-[ -n "$CBLAS" ] && [ ! -e "/usr/lib/$ARCH_LIB/libcblas.so.3" ] && sudo ln -sf "$CBLAS" "/usr/lib/$ARCH_LIB/libcblas.so.3"
-[ ! -e "/usr/lib/$ARCH_LIB/libcblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libcblas.so.3"
-[ ! -e "/usr/lib/$ARCH_LIB/libblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libblas.so.3"
-
-# Link FFmpeg sonames that pip OpenCV expects (e.g. .59) to whatever Trixie has
-link_soname() {
-  local want="$1"   # e.g. libavcodec.so.59
-  local pattern="$2" # e.g. libavcodec.so.*
-  if [ -e "/usr/lib/$ARCH_LIB/$want" ]; then
-    return 0
-  fi
-  local found
-  found="$(ls -1 /usr/lib/$ARCH_LIB/$pattern 2>/dev/null | sort -V | tail -n 1)"
-  if [ -n "$found" ]; then
-    echo "Linking $found -> /usr/lib/$ARCH_LIB/$want"
-    sudo ln -sf "$found" "/usr/lib/$ARCH_LIB/$want"
-  else
-    echo "WARNING: no match for $pattern"
-  fi
-}
-
-link_soname libavcodec.so.59    'libavcodec.so.*'
-link_soname libavformat.so.59   'libavformat.so.*'
-link_soname libavutil.so.57     'libavutil.so.*'
-link_soname libswscale.so.6     'libswscale.so.*'
-link_soname libswresample.so.4  'libswresample.so.*'
-link_soname libavcodec.so.60    'libavcodec.so.*'
-link_soname libavformat.so.60   'libavformat.so.*'
-
+sudo rm -f \
+  /usr/lib/$ARCH_LIB/libavcodec.so.59 \
+  /usr/lib/$ARCH_LIB/libavcodec.so.60 \
+  /usr/lib/$ARCH_LIB/libavformat.so.59 \
+  /usr/lib/$ARCH_LIB/libavformat.so.60 \
+  /usr/lib/$ARCH_LIB/libavutil.so.57 \
+  /usr/lib/$ARCH_LIB/libswscale.so.6 \
+  /usr/lib/$ARCH_LIB/libswresample.so.4
 sudo ldconfig
 
-echo "=== libs present ==="
-ls -l /usr/lib/$ARCH_LIB/libavcodec.so* /usr/lib/$ARCH_LIB/libcblas.so.3 2>/dev/null | head -20
+# 2) System tools ML camera needs
+sudo apt update
+sudo apt install -y ffmpeg libopenblas0 libblas3 liblapack3 libgomp1 || true
 
-# ============================================================
-# 2) TEST ML VENV
-# ============================================================
-source ~/gratify-ml-venv/bin/activate
+# 3) Pull latest ML code (no OpenCV)
 cd ~/ServiceBin
-python -c "import cv2; print('cv2 OK', cv2.__version__)"
-python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
-python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
+git pull
 
-# ============================================================
-# 3) RESTART GARBAGE ONLY (do not touch ads)
-# ============================================================
+# 4) Fix ML venv packages
+source ~/gratify-ml-venv/bin/activate
+pip uninstall -y opencv-python-headless opencv-python || true
+pip install -U pip
+pip install numpy Pillow pyserial requests tflite-runtime==2.14.0
+
+# 5) Test (no cv2)
+python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
+python -c "from PIL import Image; print('Pillow OK')"
+python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
+which ffmpeg
+
+# 6) Point ONLY garbage at ML venv (if not already)
+sudo mkdir -p /etc/systemd/system/gratify-garbage.service.d
+sudo tee /etc/systemd/system/gratify-garbage.service.d/override.conf >/dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=$HOME/gratify-ml-venv/bin/python -m GarbageDetection.main
+EOF
+
+sudo systemctl daemon-reload
 sudo systemctl restart gratify-garbage
 sudo systemctl status gratify-garbage --no-pager

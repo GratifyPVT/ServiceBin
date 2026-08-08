@@ -3,7 +3,7 @@ import sys
 import time
 from datetime import datetime
 
-import cv2
+from PIL import Image
 
 import config
 from GarbageDetection.classifier import predict
@@ -39,7 +39,9 @@ def _save_frame(frame, cls, result, conf):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}_{cls}_{result}_{conf:.2f}.jpg"
     filepath = os.path.join(IMAGE_DIR, filename)
-    cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    # frame is BGR uint8
+    rgb = frame[:, :, ::-1]
+    Image.fromarray(rgb).save(filepath, format="JPEG", quality=85)
     print("Saved:", filename, "\n")
 
 

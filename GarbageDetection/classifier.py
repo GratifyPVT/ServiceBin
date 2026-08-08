@@ -1,8 +1,8 @@
-"""TFLite waste classifier for Raspberry Pi (Pi 3A-friendly)."""
+"""TFLite waste classifier for Raspberry Pi (no OpenCV — Trixie-safe)."""
 import os
 
-import cv2
 import numpy as np
+from PIL import Image
 
 import config
 
@@ -17,9 +17,8 @@ def _load_interpreter(model_path):
             from tensorflow.lite.python.interpreter import Interpreter
         except ImportError as exc:
             raise ImportError(
-                "Need tflite-runtime. On Pi OS Trixie/Python 3.13 it is not on pip. "
-                "Use conda env mf with Python 3.11, then: pip install tflite-runtime "
-                "(see pi123.txt section B)."
+                "Need tflite-runtime in the ML Python 3.11 venv. "
+                "See ml.txt"
             ) from exc
 
     if not os.path.isfile(model_path):
@@ -48,27 +47,31 @@ def _get_interpreter():
 
 
 def _preprocess(frame):
-    """Match MobileNetV3 training preprocess: RGB + scale to [-1, 1]."""
-    img = cv2.resize(frame, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_AREA)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.astype(np.float32)
-    img = (img / 127.5) - 1.0
-    return np.expand_dims(img, axis=0)
+    """Match MobileNetV3 training preprocess: RGB + scale to [-1, 1].
+
+    `frame` is BGR uint8 HxWx3 (same layout we used with OpenCV).
+    """
+    if frame is None or getattr(frame, "size", 0) == 0:
+        raise ValueError("empty frame")
+
+    # BGR -> RGB
+    rgb = frame[:, :, ::-1]
+    img = Image.fromarray(rgb).resize((INPUT_SIZE, INPUT_SIZE), Image.BILINEAR)
+    arr = np.asarray(img, dtype=np.float32)
+    arr = (arr / 127.5) - 1.0
+    return np.expand_dims(arr, axis=0)
 
 
 def predict(frame):
     """
-    Classify a BGR OpenCV frame.
+    Classify a BGR uint8 frame.
 
     Returns:
         (uart_letter, class_name, confidence)
-        uart_letter is B / N / M from config.CATEGORY_MAPPING
-        (M when confidence is below threshold).
     """
     interpreter, input_detail, output_detail = _get_interpreter()
     tensor = _preprocess(frame)
 
-    # Cast to model input dtype (float16 models still accept float32 input often)
     dtype = input_detail["dtype"]
     if dtype != tensor.dtype:
         tensor = tensor.astype(dtype)
