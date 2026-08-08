@@ -1,20 +1,10 @@
-# Gratify Python deps (Raspberry Pi 3A+ + desktop)
-# Core packages (ads + waste + garbage camera code)
+# Core packages only (ads + waste + camera helpers).
+# Safe on Raspberry Pi OS Trixie / Python 3.13 / armv7l.
+requests
 numpy
 opencv-python-headless
 pyserial
-requests
 
-# ML runtime — DO NOT rely on pip for this on fresh Pi OS (Python 3.13 / armv7l).
-# Pip often has: "No matching distribution found for tflite-runtime"
-#
-# On Raspberry Pi OS install with apt instead:
-#   sudo apt install -y python3-tflite-runtime
-# and create the venv with system site packages:
-#   python3 -m venv --system-site-packages ~/gratify-venv
-#
-# Optional pip install only if you have Python 3.9–3.11 AND a matching wheel:
-# tflite-runtime; python_version < "3.12" and (platform_machine == "aarch64" or platform_machine == "armv7l")
-
-# Desktop / x86 only — never install on Pi 3A+ (512MB RAM)
-tensorflow; platform_machine == "x86_64" or platform_machine == "AMD64"
+# ML: install tflite-runtime ONLY inside Python 3.9–3.11 (e.g. conda env mf).
+# Do NOT uncomment on system Python 3.13 — pip will fail and block everything:
+# tflite-runtime

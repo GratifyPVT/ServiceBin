@@ -1,36 +1,80 @@
-# Fix ads crash + tflite on Pi OS (Python 3.13 / Pi 3A+)
-# Root cause: pip has NO tflite-runtime for py3.13 armv7l,
-# so "pip install -r requirements.txt" failed and requests never installed.
+# Pi 3A+ / Raspberry Pi OS Trixie (Python 3.13, armv7l)
+# ============================================================
+# WHY THINGS FAIL:
+# - pip has NO tflite-runtime for Python 3.13 on Pi
+# - apt has NO python3-tflite-runtime on Trixie
+# - so "pip install -r requirements.txt" dies and requests never installs
+# - ads then crashes: ModuleNotFoundError: No module named 'requests'
+#
+# FIX: install core packages WITHOUT tflite first (ads+waste work).
+#      then install Miniforge + Python 3.11 for ML (tflite works there).
+# ============================================================
 
-# 1) See error
-journalctl -u gratify-ads -n 40 --no-pager
-
-# 2) Install tflite from apt (works on Pi OS)
-sudo apt update
-sudo apt install -y mpv python3-tflite-runtime
-
-# 3) Recreate venv so it can see apt Python packages
-deactivate 2>/dev/null
-rm -rf ~/gratify-venv
-python3 -m venv --system-site-packages ~/gratify-venv
+# ------------------------------------------------------------
+# A) FIX ADS + WASTE NOW (use current venv / Python 3.13)
+# ------------------------------------------------------------
 source ~/gratify-venv/bin/activate
-pip install -U pip
 cd ~/ServiceBin
-pip install numpy opencv-python-headless pyserial requests
 
-# 4) Verify
+# DO NOT use old requirements.txt if it still lists tflite-runtime
+pip install -U pip
+pip install requests numpy opencv-python-headless pyserial
+
+python -c "import requests; print('requests OK')"
+which mpv || sudo apt install -y mpv
+ls AdsManagement/videos/*.mp4
+
+sudo systemctl stop gratify-ads gratify-waste 2>/dev/null
+CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
+sudo systemctl restart gratify-ads gratify-waste
+sudo systemctl status gratify-ads --no-pager
+
+# manual ads test (Ctrl+C to stop):
+# cd ~/ServiceBin && source ~/gratify-venv/bin/activate && python -m AdsManagement.service
+
+# ------------------------------------------------------------
+# B) FIX ML / GARBAGE (needs Python 3.11 + tflite-runtime)
+#    Python 3.13 on Trixie cannot install tflite — use Miniforge.
+# ------------------------------------------------------------
+cd ~
+ARCH="$(uname -m)"
+# armv7l = 32-bit Pi OS (normal for Pi 3A+)
+curl -L -o Miniforge3.sh \
+  "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${ARCH}.sh"
+
+# If armv7l download 404s, try older tag manually, OR flash 64-bit Pi OS and re-run.
+bash Miniforge3.sh -b -p $HOME/miniforge3
+rm -f Miniforge3.sh
+$HOME/miniforge3/bin/conda init bash
+source ~/.bashrc
+
+conda create -n mf python=3.11 -y
+conda activate mf
+python -V
+# must show Python 3.11.x
+
+cd ~/ServiceBin
+pip install -U pip
+pip install requests numpy opencv-python-headless pyserial tflite-runtime
+
 python -c "import requests; print('requests OK')"
 python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
-which mpv
+ls GarbageDetection/model/*.tflite
 
-# 5) Reinstall systemd services to use this venv
-cd ~/ServiceBin
-CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
+# Point ALL services at conda python 3.11
+CONDA_PYTHON=$HOME/miniforge3/envs/mf/bin/python bash deploy/install-services.sh
 
-# 6) Test ads (Ctrl+C to stop)
-cd ~/ServiceBin
-python -m AdsManagement.service
+sudo systemctl restart gratify-update gratify-garbage gratify-ads gratify-waste
+sudo systemctl status gratify-garbage gratify-ads gratify-waste --no-pager
 
-# 7) Restart
-sudo systemctl restart gratify-ads gratify-waste gratify-garbage
-sudo systemctl status gratify-ads --no-pager
+# ------------------------------------------------------------
+# C) IF SECTION B Miniforge armv7l 404s — try apt Python 3.11
+# ------------------------------------------------------------
+# sudo apt update
+# sudo apt install -y python3.11 python3.11-venv python3.11-dev
+# rm -rf ~/gratify-venv
+# python3.11 -m venv ~/gratify-venv
+# source ~/gratify-venv/bin/activate
+# pip install -U pip
+# pip install requests numpy opencv-python-headless pyserial tflite-runtime
+# CONDA_PYTHON=$HOME/gratify-venv/bin/python bash ~/ServiceBin/deploy/install-services.sh

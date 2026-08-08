@@ -17,8 +17,9 @@ def _load_interpreter(model_path):
             from tensorflow.lite.python.interpreter import Interpreter
         except ImportError as exc:
             raise ImportError(
-                "Need tflite-runtime (Pi) or tensorflow (desktop). "
-                "Install with: pip install -r requirements.txt"
+                "Need tflite-runtime. On Pi OS Trixie/Python 3.13 it is not on pip. "
+                "Use conda env mf with Python 3.11, then: pip install tflite-runtime "
+                "(see pi123.txt section B)."
             ) from exc
 
     if not os.path.isfile(model_path):
