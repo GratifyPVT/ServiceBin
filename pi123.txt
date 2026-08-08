@@ -1,22 +1,23 @@
-# fix the overwrite conflict
-sudo apt install -y -o Dpkg::Options::="--force-overwrite" raspberrypi-ui-mods
+# Fix gratify-ads crash (venv — no Miniforge)
 
-# finish any half-installed packages
-sudo dpkg --configure -a
-sudo apt -f install -y
+journalctl -u gratify-ads -n 80 --no-pager
 
-# install login manager if needed
-sudo apt install -y lightdm
+source ~/gratify-venv/bin/activate
+cd ~/ServiceBin
+pip install -U pip
+pip install -r requirements.txt
 
-# set graphical boot
-ls /lib/systemd/system/graphical.target
-sudo systemctl set-default graphical.target
+python -c "import requests, config; print('imports OK')"
+which mpv || sudo apt install -y mpv
+ls AdsManagement/videos/*.mp4
 
+# manual test (Ctrl+C to stop)
+python -m AdsManagement.service
 
+# then restart service
+sudo systemctl restart gratify-ads
+sudo systemctl status gratify-ads --no-pager
 
-
-sudo raspi-config
-# System Options → Boot / Auto Login → Desktop Autologin
-
-sudo systemctl enable gratify-ads
-sudo reboot
+# if display/X11/mpv errors:
+# sudo raspi-config  →  Boot / Auto Login → Desktop Autologin
+# sudo reboot

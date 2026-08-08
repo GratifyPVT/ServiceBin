@@ -164,32 +164,44 @@ sudo systemctl status gratify-ads --no-pager
 From status photo, typical meanings:
 
 - `gratify-ads` **inactive (dead)** → ads never started (nothing on screen)
+- `gratify-ads` **activating (auto-restart) / exit-code** → Python crashed (missing pip packages is #1 cause)
 - `gratify-garbage` **activating (start-pre)** → waiting for Arduino serial (up to ~15–90s)
 - `gratify-waste` **auto-restart / exit-code** → Python uploader crashed
 
-### Fix now on the Pi
+### Fix now on the Pi (venv path — no Miniforge needed)
+
+You do **not** need Miniforge if you followed this file. Services already use `~/gratify-venv`.
 
 ```bash
-# see exact errors
-journalctl -u gratify-ads -n 50 --no-pager
-journalctl -u gratify-waste -n 50 --no-pager
+# 1) See the real Python error
+journalctl -u gratify-ads -n 80 --no-pager
 
-# make sure deps + mpv exist
+# 2) Reinstall deps into the same venv systemd uses
 source ~/gratify-venv/bin/activate
-pip install -r ~/ServiceBin/requirements.txt
-which mpv
+cd ~/ServiceBin
+pip install -U pip
+pip install -r requirements.txt
 
-# ensure a video exists (or wait for API download)
-ls ~/ServiceBin/AdsManagement/videos/
+# 3) Confirm imports + mpv
+python -c "import requests, config; print('imports OK')"
+which mpv || sudo apt install -y mpv
+ls ~/ServiceBin/AdsManagement/videos/*.mp4
 
-# restart after desktop is visible
-sudo systemctl restart gratify-ads gratify-waste gratify-garbage
-sudo systemctl status gratify-ads gratify-waste gratify-garbage --no-pager
+# 4) Manual test (Ctrl+C to stop) — must work before systemd will
+cd ~/ServiceBin
+python -m AdsManagement.service
+
+# 5) If manual works, restart the service
+sudo systemctl restart gratify-ads
+sudo systemctl status gratify-ads --no-pager
 ```
 
-Enable desktop auto-login so ads can use the screen after reboot:
+If journal shows `No module named requests` (or similar), step 2 fixes it.
+
+If journal shows display / X11 / mpv errors, enable Desktop Autologin:
 
 ```bash
 sudo raspi-config
-# System Options → Auto Login → Desktop
+# System Options → Boot / Auto Login → Desktop Autologin
+sudo reboot
 ```
