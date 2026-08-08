@@ -1,18 +1,60 @@
 # ============================================================
-# 1) SYSTEM LIBS (fix libcblas.so.3 for OpenCV)
+# 1) SYSTEM LIBS FOR OPENCV (Trixie / Pi 3A+)
 # ============================================================
 sudo apt update
+
+# BLAS (already mostly installed)
 sudo apt install -y libopenblas0 libblas3 liblapack3 libgomp1 libgfortran5 || true
-sudo apt install -y libopenblas0t64 libblas3t64 liblapack3t64 || true
-sudo apt install -y libgl1 libglib2.0-0 libatomic1 || true
+
+# FFmpeg / OpenCV shared libs (fixes libavcodec.so.59 etc.)
+sudo apt install -y ffmpeg \
+  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
+  libavcodec61 libavformat61 libavutil59 libswscale8 libswresample5 \
+  libavcodec60 libavformat60 libavutil58 libswscale7 libswresample4 \
+  2>/dev/null || true
+
+# glib replacement on Trixie
+sudo apt install -y libglib2.0-0t64 libatomic1 libgl1 || true
+sudo apt install -y libglib2.0-0 || true
 
 ARCH_LIB="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo arm-linux-gnueabihf)"
+
+# Link BLAS if needed
 CBLAS="$(find /usr/lib/$ARCH_LIB -name 'libcblas.so.3' 2>/dev/null | head -n 1)"
 OB="$(find /usr/lib/$ARCH_LIB -name 'libopenblas.so.0' 2>/dev/null | head -n 1)"
-[ -n "$CBLAS" ] && sudo ln -sf "$CBLAS" "/usr/lib/$ARCH_LIB/libcblas.so.3"
+[ -n "$CBLAS" ] && [ ! -e "/usr/lib/$ARCH_LIB/libcblas.so.3" ] && sudo ln -sf "$CBLAS" "/usr/lib/$ARCH_LIB/libcblas.so.3"
 [ ! -e "/usr/lib/$ARCH_LIB/libcblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libcblas.so.3"
 [ ! -e "/usr/lib/$ARCH_LIB/libblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libblas.so.3"
+
+# Link FFmpeg sonames that pip OpenCV expects (e.g. .59) to whatever Trixie has
+link_soname() {
+  local want="$1"   # e.g. libavcodec.so.59
+  local pattern="$2" # e.g. libavcodec.so.*
+  if [ -e "/usr/lib/$ARCH_LIB/$want" ]; then
+    return 0
+  fi
+  local found
+  found="$(ls -1 /usr/lib/$ARCH_LIB/$pattern 2>/dev/null | sort -V | tail -n 1)"
+  if [ -n "$found" ]; then
+    echo "Linking $found -> /usr/lib/$ARCH_LIB/$want"
+    sudo ln -sf "$found" "/usr/lib/$ARCH_LIB/$want"
+  else
+    echo "WARNING: no match for $pattern"
+  fi
+}
+
+link_soname libavcodec.so.59    'libavcodec.so.*'
+link_soname libavformat.so.59   'libavformat.so.*'
+link_soname libavutil.so.57     'libavutil.so.*'
+link_soname libswscale.so.6     'libswscale.so.*'
+link_soname libswresample.so.4  'libswresample.so.*'
+link_soname libavcodec.so.60    'libavcodec.so.*'
+link_soname libavformat.so.60   'libavformat.so.*'
+
 sudo ldconfig
+
+echo "=== libs present ==="
+ls -l /usr/lib/$ARCH_LIB/libavcodec.so* /usr/lib/$ARCH_LIB/libcblas.so.3 2>/dev/null | head -20
 
 # ============================================================
 # 2) TEST ML VENV
