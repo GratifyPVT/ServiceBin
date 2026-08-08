@@ -33,6 +33,7 @@ free -h
 sudo apt update
 sudo apt upgrade -y
 
+# NOTE: libatlas-base-dev is gone on newer Pi OS (Bookworm+) — use OpenBLAS instead.
 sudo apt install -y \
   git \
   curl \
@@ -42,14 +43,17 @@ sudo apt install -y \
   python3-pip \
   python3-venv \
   build-essential \
-  libatlas-base-dev \
   libopenblas-dev \
+  liblapack-dev \
   libjpeg-dev \
   zlib1g-dev \
   libffi-dev \
   libssl-dev \
   ffmpeg \
   i2c-tools
+
+# If apt still complains about a missing package, install the rest without it:
+# sudo apt install -y git curl wget mpv python3 python3-pip python3-venv build-essential libopenblas-dev libjpeg-dev zlib1g-dev libffi-dev libssl-dev ffmpeg i2c-tools
 
 # Optional but useful if packages were half-broken:
 # sudo dpkg --configure -a
