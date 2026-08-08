@@ -1,0 +1,266 @@
+================================================================================
+Gratify ServiceBin — Fresh Raspberry Pi OS install (Pi 3 Model A+)
+================================================================================
+Target: Raspberry Pi 3 Model A+ (512 MB RAM)
+OS:     Raspberry Pi OS with Desktop (32-bit recommended)
+Env:    conda env name = mf
+
+Copy-paste each section on the Pi (SSH or Terminal).
+Do NOT install full TensorFlow on this board — use tflite-runtime only.
+
+================================================================================
+0) FIRST BOOT CHECKS
+================================================================================
+
+uname -m
+# expect: armv7l  (32-bit)  OR  aarch64 (64-bit)
+# Pi 3A+ works best with 32-bit Raspberry Pi OS Desktop
+
+free -h
+# expect ~512 MB RAM
+
+# Add swap so conda/pip do not OOM (important on 512 MB)
+sudo dphys-swapfile swapoff
+sudo sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+free -h
+
+================================================================================
+1) SYSTEM PACKAGES (apt)
+================================================================================
+
+sudo apt update
+sudo apt upgrade -y
+
+sudo apt install -y \
+  git \
+  curl \
+  wget \
+  mpv \
+  python3 \
+  python3-pip \
+  python3-venv \
+  build-essential \
+  libatlas-base-dev \
+  libopenblas-dev \
+  libjpeg-dev \
+  zlib1g-dev \
+  libffi-dev \
+  libssl-dev \
+  ffmpeg \
+  i2c-tools
+
+# Optional but useful if packages were half-broken:
+# sudo dpkg --configure -a
+# sudo apt -f install -y
+
+================================================================================
+2) ENABLE CAMERA + SERIAL (UART) + DESKTOP AUTOLOGIN
+================================================================================
+
+sudo raspi-config
+# Do these menus:
+#   Interface Options → Camera          → Enable
+#   Interface Options → Serial Port     → Login shell over serial?  NO
+#                                      → Serial port hardware?     YES
+#   System Options → Boot / Auto Login → Desktop Autologin
+#   Finish → Reboot when asked (or reboot later)
+
+# Graphical boot (needed for ads / mpv fullscreen)
+sudo systemctl set-default graphical.target
+
+# Permissions for camera + Arduino USB/UART
+sudo usermod -aG video,dialout $USER
+
+# Apply group membership now (or reboot later)
+newgrp dialout
+
+================================================================================
+3) INSTALL MINIFORGE (conda for Pi / ARM)
+================================================================================
+# Use Miniforge — works on Pi ARM. Old Miniconda often breaks on Pi OS.
+
+cd ~
+
+ARCH="$(uname -m)"
+if [ "$ARCH" = "aarch64" ]; then
+  MF_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh"
+elif [ "$ARCH" = "armv7l" ]; then
+  MF_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-armv7l.sh"
+else
+  echo "Unexpected arch: $ARCH"
+  exit 1
+fi
+
+echo "Downloading: $MF_URL"
+curl -L -o Miniforge3.sh "$MF_URL"
+bash Miniforge3.sh -b -p "$HOME/miniforge3"
+rm -f Miniforge3.sh
+
+# Init conda for bash
+"$HOME/miniforge3/bin/conda" init bash
+source ~/.bashrc
+
+# Verify
+conda --version
+which conda
+
+# Keep conda light on 512 MB RAM
+conda config --set auto_update_conda false
+conda config --set channel_priority strict
+
+================================================================================
+4) CREATE CONDA ENV + INSTALL PYTHON PACKAGES
+================================================================================
+
+# Python 3.11 is a good balance for Pi 3A+
+conda create -n mf python=3.11 -y
+conda activate mf
+
+python -V
+which python
+
+# Upgrade pip inside the env
+pip install -U pip setuptools wheel
+
+# Clone ServiceBin (skip clone if already present)
+cd ~
+if [ ! -d "$HOME/ServiceBin" ]; then
+  git clone https://github.com/GratifyPVT/ServiceBin.git
+fi
+cd ~/ServiceBin
+
+# Confirm ML model exists (required)
+ls -lh GarbageDetection/model/*.tflite
+
+# Install project deps INTO conda env "mf"
+# This installs: numpy, opencv-python-headless, pyserial, requests, tflite-runtime
+pip install -r requirements.txt
+
+# Quick import check (must all succeed)
+python - <<'PY'
+import numpy, cv2, serial, requests
+try:
+    from tflite_runtime.interpreter import Interpreter
+    print("tflite_runtime: OK")
+except Exception as e:
+    print("tflite_runtime FAILED:", e)
+    raise
+print("numpy/opencv/pyserial/requests: OK")
+print("python:", __import__("sys").executable)
+PY
+
+# Confirm mpv (system package, not pip)
+which mpv
+mpv --version | head -n 1
+
+================================================================================
+5) ONE-TIME HARDWARE CHECKS
+================================================================================
+
+# Camera device
+ls -l /dev/video* || echo "No camera node — enable camera in raspi-config"
+
+# Serial (USB adapter or onboard UART)
+ls -l /dev/ttyUSB* /dev/ttyACM* /dev/serial0 /dev/ttyAMA0 2>/dev/null || true
+
+# Optional: short manual test of ML service (Ctrl+C to stop)
+# conda activate mf
+# cd ~/ServiceBin
+# python -m GarbageDetection.main
+
+# Optional: ads test
+# python -m AdsManagement.service
+
+# Optional: waste uploader test
+# python -m WasteManagement.uploader
+
+================================================================================
+6) INSTALL SYSTEMD SERVICES (AUTO-START ON EVERY BOOT)
+================================================================================
+
+conda activate mf
+cd ~/ServiceBin
+
+# Point services at conda env "mf" python
+CONDA_ENV_NAME=mf bash deploy/install-services.sh
+
+# Or explicit path:
+# CONDA_PYTHON=$HOME/miniforge3/envs/mf/bin/python bash deploy/install-services.sh
+
+# Check status
+sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste --no-pager
+
+================================================================================
+7) REBOOT AND VERIFY
+================================================================================
+
+sudo reboot
+
+# After reboot:
+sudo systemctl status gratify-garbage --no-pager
+sudo systemctl status gratify-ads --no-pager
+sudo systemctl status gratify-waste --no-pager
+
+# Live logs
+# journalctl -u gratify-garbage -f
+# journalctl -u gratify-ads -f
+# journalctl -u gratify-waste -f
+# journalctl -u gratify-update -f
+
+================================================================================
+USEFUL COMMANDS LATER
+================================================================================
+
+# Activate conda env
+source ~/.bashrc
+conda activate mf
+cd ~/ServiceBin
+
+# Restart services
+sudo systemctl restart gratify-garbage gratify-ads gratify-waste
+
+# Stop / disable auto-start
+# sudo systemctl stop gratify-garbage gratify-ads gratify-waste gratify-update
+# sudo systemctl disable gratify-garbage gratify-ads gratify-waste gratify-update
+
+# Reinstall deps after git pull
+# conda activate mf
+# cd ~/ServiceBin
+# pip install -r requirements.txt
+# sudo systemctl restart gratify-garbage gratify-ads gratify-waste
+
+================================================================================
+NOTES FOR PI 3A+ (READ)
+================================================================================
+
+1) 512 MB RAM — never install full "tensorflow" on the Pi.
+   requirements.txt already selects tflite-runtime on ARM.
+
+2) Prefer Raspberry Pi OS Desktop 32-bit so ads (mpv) have a display.
+   Enable Desktop Autologin or ads may stay black after reboot.
+
+3) Conda env name must stay "mf" (or pass CONDA_ENV_NAME / CONDA_PYTHON
+   when running deploy/install-services.sh).
+
+4) If Miniforge armv7l download 404s, use:
+   - Raspberry Pi OS 64-bit (aarch64) Miniforge link, OR
+   - fallback venv (no conda):
+       python3 -m venv ~/gratify-venv
+       source ~/gratify-venv/bin/activate
+       pip install -U pip
+       pip install -r ~/ServiceBin/requirements.txt
+       CONDA_PYTHON=$HOME/gratify-venv/bin/python bash ~/ServiceBin/deploy/install-services.sh
+
+5) If pip OOMs / gets killed during install:
+   - confirm swap is 1024 MB (section 0)
+   - install packages one-by-one:
+       pip install numpy
+       pip install opencv-python-headless
+       pip install pyserial requests
+       pip install tflite-runtime
+
+================================================================================
+END
+================================================================================
