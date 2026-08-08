@@ -1,12 +1,11 @@
-# Core packages (ads + waste work on system Python 3.13 venv too)
+# Core packages
 requests
-numpy
+numpy<2
 pyserial
 Pillow
 
-# Do NOT install opencv-python-headless on Pi OS Trixie —
-# pip wheels need old FFmpeg (LIBSWSCALE_6) and break with soname hacks.
-# ML camera uses system ffmpeg instead (see GarbageDetection/runtime.py).
+# Do NOT install opencv-python-headless on Pi OS Trixie
+# (FFmpeg ABI mismatch). ML camera uses system ffmpeg.
 
-# ML only (Python 3.11 venv ~/gratify-ml-venv):
+# ML venv (Python 3.11) also needs:
 #   pip install tflite-runtime==2.14.0
