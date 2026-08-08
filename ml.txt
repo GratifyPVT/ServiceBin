@@ -1,21 +1,26 @@
 # ============================================================
-# ML FIX — NumPy 1.x required by tflite-runtime (do not touch ads)
+# FIX: garbage is using WRONG python (gratify-venv)
+# Must use ~/gratify-ml-venv — do not touch ads
 # ============================================================
 
-source ~/gratify-ml-venv/bin/activate
-cd ~/ServiceBin
+# 1) See current crash reason
+journalctl -u gratify-garbage -n 40 --no-pager
 
-# tflite-runtime 2.14 was built for NumPy 1.x — NumPy 2.x breaks it
-pip uninstall -y opencv-python-headless opencv-python || true
-pip install -U pip
-pip install "numpy<2" Pillow pyserial requests tflite-runtime==2.14.0
+# 2) Point ONLY gratify-garbage at ML venv
+sudo mkdir -p /etc/systemd/system/gratify-garbage.service.d
+sudo tee /etc/systemd/system/gratify-garbage.service.d/override.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/home/abc/gratify-ml-venv/bin/python -m GarbageDetection.main
+Environment=PYTHONUNBUFFERED=1
+EOF
 
-# Test
-python -c "import numpy; print('numpy', numpy.__version__)"
-python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
-python -c "from PIL import Image; print('Pillow OK')"
-python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
-
-# Restart ONLY garbage
+sudo systemctl daemon-reload
 sudo systemctl restart gratify-garbage
 sudo systemctl status gratify-garbage --no-pager
+
+# 3) Confirm it is NOT using gratify-venv anymore
+systemctl cat gratify-garbage | grep ExecStart
+
+# 4) Live logs (Ctrl+C to stop watching)
+journalctl -u gratify-garbage -f
