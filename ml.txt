@@ -1,29 +1,30 @@
-# ML ONLY — ads stays on ~/gratify-venv (do not touch ads)
 # ============================================================
-# FIX NOW: OpenCV needs libcblas.so.3 (system lib, not pip)
-# Your ML venv + tflite are already OK — only this was missing.
+# 1) SYSTEM LIBS (fix libcblas.so.3 for OpenCV)
 # ============================================================
-
-# A) Install BLAS/OpenBLAS system libs (fixes libcblas.so.3)
 sudo apt update
-sudo apt install -y libopenblas0 liblapack3 libgomp1 libgfortran5
+sudo apt install -y libopenblas0 libblas3 liblapack3 libgomp1 libgfortran5 || true
+sudo apt install -y libopenblas0t64 libblas3t64 liblapack3t64 || true
+sudo apt install -y libgl1 libglib2.0-0 libatomic1 || true
 
-# If still missing libcblas.so.3, also try:
-# sudo apt install -y libblas3
+ARCH_LIB="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo arm-linux-gnueabihf)"
+CBLAS="$(find /usr/lib/$ARCH_LIB -name 'libcblas.so.3' 2>/dev/null | head -n 1)"
+OB="$(find /usr/lib/$ARCH_LIB -name 'libopenblas.so.0' 2>/dev/null | head -n 1)"
+[ -n "$CBLAS" ] && sudo ln -sf "$CBLAS" "/usr/lib/$ARCH_LIB/libcblas.so.3"
+[ ! -e "/usr/lib/$ARCH_LIB/libcblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libcblas.so.3"
+[ ! -e "/usr/lib/$ARCH_LIB/libblas.so.3" ] && [ -n "$OB" ] && sudo ln -sf "$OB" "/usr/lib/$ARCH_LIB/libblas.so.3"
+sudo ldconfig
 
-# B) Re-test in existing ML venv (do NOT recreate unless needed)
+# ============================================================
+# 2) TEST ML VENV
+# ============================================================
 source ~/gratify-ml-venv/bin/activate
 cd ~/ServiceBin
 python -c "import cv2; print('cv2 OK', cv2.__version__)"
 python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
 python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
 
-# C) Restart ONLY garbage service
-sudo systemctl daemon-reload
+# ============================================================
+# 3) RESTART GARBAGE ONLY (do not touch ads)
+# ============================================================
 sudo systemctl restart gratify-garbage
 sudo systemctl status gratify-garbage --no-pager
-
-# DO NOT run:
-# install-services.sh
-# systemctl restart gratify-ads
-# rm -rf ~/gratify-venv
