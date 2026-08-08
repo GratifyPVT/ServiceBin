@@ -1,15 +1,20 @@
-# Gratify Python deps (Raspberry Pi 3A + desktop)
-# System packages (Pi):  sudo apt install -y mpv git python3-pip
-# Create env:            conda create -n mf python=3.11 && conda activate mf
-# Install:               pip install -r requirements.txt
-
+# Gratify Python deps (Raspberry Pi 3A+ + desktop)
+# Core packages (ads + waste + garbage camera code)
 numpy
 opencv-python-headless
 pyserial
 requests
 
-# Pi / ARM — use TFLite runtime only (Pi 3A has 512MB RAM; skip full TensorFlow)
-tflite-runtime; platform_machine == "aarch64" or platform_machine == "armv7l"
+# ML runtime — DO NOT rely on pip for this on fresh Pi OS (Python 3.13 / armv7l).
+# Pip often has: "No matching distribution found for tflite-runtime"
+#
+# On Raspberry Pi OS install with apt instead:
+#   sudo apt install -y python3-tflite-runtime
+# and create the venv with system site packages:
+#   python3 -m venv --system-site-packages ~/gratify-venv
+#
+# Optional pip install only if you have Python 3.9–3.11 AND a matching wheel:
+# tflite-runtime; python_version < "3.12" and (platform_machine == "aarch64" or platform_machine == "armv7l")
 
-# Desktop / x86 only — fallback when tflite-runtime has no wheel
+# Desktop / x86 only — never install on Pi 3A+ (512MB RAM)
 tensorflow; platform_machine == "x86_64" or platform_machine == "AMD64"

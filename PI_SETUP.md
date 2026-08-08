@@ -41,14 +41,29 @@ cd ServiceBin
 
 ## 3. Create venv + install Python deps
 
+On **new Pi OS (Python 3.13)** do **not** expect `pip install tflite-runtime` to work on Pi 3A+.
+Use apt for TFLite, and a venv with `--system-site-packages`.
+
 ```bash
-python3 -m venv ~/gratify-venv
+sudo apt install -y python3-tflite-runtime mpv
+
+# recreate cleanly if an old venv already exists
+rm -rf ~/gratify-venv
+python3 -m venv --system-site-packages ~/gratify-venv
 source ~/gratify-venv/bin/activate
 pip install -U pip
-pip install -r requirements.txt
+cd ~/ServiceBin
+pip install numpy opencv-python-headless pyserial requests
 ```
 
-Later sessions, activate with:
+Check:
+
+```bash
+python -c "import requests; print('requests OK')"
+python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
+```
+
+Later sessions:
 
 ```bash
 source ~/gratify-venv/bin/activate
