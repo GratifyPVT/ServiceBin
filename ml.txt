@@ -1,0 +1,51 @@
+# ML ONLY — does NOT touch ads / ~/gratify-venv / gratify-ads
+# ============================================================
+# Why this works:
+# - Python 3.13 cannot install tflite on Pi (that was the old error)
+# - Python 3.11 CAN: tflite_runtime has linux_armv7l cp311 wheel
+# - Use a SEPARATE venv so ads keeps working on ~/gratify-venv
+# ============================================================
+
+# 1) Need Python 3.11
+python3.11 -V
+# if missing:
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
+# 2) ML venv only (never delete ~/gratify-venv)
+python3.11 -m venv ~/gratify-ml-venv
+source ~/gratify-ml-venv/bin/activate
+python -V
+# MUST show Python 3.11.x — if 3.13, STOP
+
+# 3) Install ML packages (pin tflite that has armv7l wheel)
+pip install -U pip setuptools wheel
+pip install numpy opencv-python-headless pyserial requests
+pip install tflite-runtime==2.14.0
+
+# 4) Verify tflite
+python -c "from tflite_runtime.interpreter import Interpreter; print('tflite OK')"
+
+# 5) Verify ML code + model exist on this Pi
+cd ~/ServiceBin
+test -f GarbageDetection/main.py || { echo "MISSING GarbageDetection/main.py — copy/pull ML code first"; exit 1; }
+test -f GarbageDetection/model/rls_mobilenetv3_mish_cbam_float16.tflite || { echo "MISSING .tflite model"; exit 1; }
+ls -lh GarbageDetection/model/*.tflite
+python -c "from GarbageDetection.classifier import predict; import numpy as np; print(predict(np.zeros((480,640,3), dtype=np.uint8)))"
+
+# 6) Change ONLY garbage service (ads unchanged)
+sudo mkdir -p /etc/systemd/system/gratify-garbage.service.d
+sudo tee /etc/systemd/system/gratify-garbage.service.d/override.conf >/dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=$HOME/gratify-ml-venv/bin/python -m GarbageDetection.main
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart gratify-garbage
+sudo systemctl status gratify-garbage --no-pager
+
+# DO NOT run these (would affect ads):
+# install-services.sh
+# systemctl restart gratify-ads
+# rm -rf ~/gratify-venv
