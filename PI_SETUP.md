@@ -69,11 +69,24 @@ Then **log out and log back in** (or reboot).
 
 ## 5. Enable services on reboot
 
+This installs and enables all four units so they start on every boot:
+`gratify-update` → then `gratify-garbage` (ML + camera), `gratify-ads`, `gratify-waste`.
+
 ```bash
 cd ~/ServiceBin
+# install script auto-finds ~/gratify-venv; override if needed:
+bash deploy/install-services.sh
+# or:
 CONDA_PYTHON=$HOME/gratify-venv/bin/python bash deploy/install-services.sh
 ```
 
+Also set desktop autologin (needed for ads / mpv):
+
+```bash
+sudo raspi-config
+# System Options → Boot / Auto Login → Desktop Autologin
+sudo systemctl set-default graphical.target
+```
 ---
 
 ## 6. Check services

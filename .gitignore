@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.serena/
+._*
+
+# Runtime data (keep folders, ignore bulk captures if desired)
+# WasteManagement/images/*.jpg

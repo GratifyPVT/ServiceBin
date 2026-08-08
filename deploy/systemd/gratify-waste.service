@@ -1,7 +1,8 @@
 [Unit]
 Description=Gratify Waste Management (image uploader)
 After=network-online.target gratify-update.service
-Wants=network-online.target gratify-update.service
+Wants=network-online.target
+Wants=gratify-update.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -9,7 +10,9 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
+Environment=HOME=@USER_HOME@
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
 ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh waste 60 0
 ExecStart=@CONDA_PYTHON@ -m WasteManagement.uploader
 Restart=always

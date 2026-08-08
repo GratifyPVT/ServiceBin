@@ -2,7 +2,8 @@
 Description=Gratify Ads Management (video player + API sync)
 # Start only after desktop/display manager is up (needed for mpv on Pi)
 After=network-online.target display-manager.service graphical.target gratify-update.service
-Wants=network-online.target graphical.target gratify-update.service
+Wants=network-online.target graphical.target
+Wants=gratify-update.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -10,9 +11,11 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
+Environment=HOME=@USER_HOME@
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/@GRATIFY_USER@/.Xauthority
+Environment=XAUTHORITY=@USER_HOME@/.Xauthority
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
 # Wait for GUI socket; then short extra settle time for login session
 ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh ads 90 180
 ExecStartPre=/bin/sleep 10

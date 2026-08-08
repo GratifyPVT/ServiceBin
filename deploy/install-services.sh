@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Install Gratify systemd services so they start automatically on boot.
-# Uses conda env mf by default (override with CONDA_ENV_NAME=tfenv).
+# Prefers: CONDA_PYTHON override → ~/gratify-venv → conda env (default: mf).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRATIFY_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
-GRATIFY_USER="${SUDO_USER:-$(whoami)}"
+GRATIFY_USER="${SUDO_USER:-${GRATIFY_USER:-$(whoami)}}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-mf}"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -16,24 +16,36 @@ SERVICES=(
   gratify-waste.service
 )
 
-find_conda_python() {
+find_python() {
   local user="$1"
   local env="$2"
+  local home
+  home="$(getent passwd "$user" | cut -d: -f6)"
 
   if [[ -n "${CONDA_PYTHON:-}" && -x "$CONDA_PYTHON" ]]; then
     echo "$CONDA_PYTHON"
     return 0
   fi
 
+  # PI_SETUP.md path — preferred on Raspberry Pi
+  if [[ -x "$home/gratify-venv/bin/python" ]]; then
+    echo "$home/gratify-venv/bin/python"
+    return 0
+  fi
+
+  # Project-local venv
+  if [[ -x "$GRATIFY_HOME/.venv/bin/python" ]]; then
+    echo "$GRATIFY_HOME/.venv/bin/python"
+    return 0
+  fi
+
   local py=""
-  py="$(sudo -u "$user" bash -lc "conda run -n $env which python 2>/dev/null" || true)"
+  py="$(sudo -u "$user" bash -lc "command -v conda >/dev/null && conda run -n $env which python 2>/dev/null" || true)"
   if [[ -n "$py" && -x "$py" ]]; then
     echo "$py"
     return 0
   fi
 
-  local home
-  home="$(getent passwd "$user" | cut -d: -f6)"
   local base
   for base in \
     "$home/miniconda3" \
@@ -56,16 +68,40 @@ if [[ "$EUID" -ne 0 ]]; then
     CONDA_PYTHON="${CONDA_PYTHON:-}" bash "$0" "$@"
 fi
 
-if ! CONDA_PYTHON="$(find_conda_python "$GRATIFY_USER" "$CONDA_ENV_NAME")"; then
-  echo "Error: conda env '$CONDA_ENV_NAME' not found for user $GRATIFY_USER"
-  echo "Create it first:  conda create -n $CONDA_ENV_NAME python=3.12"
-  echo "Or set path manually:  CONDA_PYTHON=/path/to/env/bin/python bash deploy/install-services.sh"
+if ! CONDA_PYTHON="$(find_python "$GRATIFY_USER" "$CONDA_ENV_NAME")"; then
+  echo "Error: no Python env found for user $GRATIFY_USER"
+  echo "Create one (recommended on Pi):"
+  echo "  python3 -m venv \$HOME/gratify-venv"
+  echo "  source \$HOME/gratify-venv/bin/activate"
+  echo "  pip install -r $GRATIFY_HOME/requirements.txt"
+  echo "Or set path manually:"
+  echo "  CONDA_PYTHON=/path/to/env/bin/python bash deploy/install-services.sh"
   exit 1
 fi
 
-echo "Using conda python: $CONDA_PYTHON ($CONDA_ENV_NAME)"
+if [[ ! -f "$GRATIFY_HOME/GarbageDetection/main.py" ]]; then
+  echo "Error: GarbageDetection/main.py missing under $GRATIFY_HOME"
+  echo "The ML service cannot start without it."
+  exit 1
+fi
+
+if [[ ! -f "$GRATIFY_HOME/GarbageDetection/model/rls_mobilenetv3_mish_cbam_float16.tflite" \
+   && ! -f "$GRATIFY_HOME/GarbageDetection/model/model.tflite" ]]; then
+  echo "Error: no TFLite model in GarbageDetection/model/"
+  echo "Expected: rls_mobilenetv3_mish_cbam_float16.tflite (or model.tflite)"
+  exit 1
+fi
+
+USER_HOME="$(getent passwd "$GRATIFY_USER" | cut -d: -f6)"
+echo "Using python: $CONDA_PYTHON"
+echo "User home:   $USER_HOME"
 
 chmod +x "$GRATIFY_HOME/deploy/wait-for-boot.sh" "$GRATIFY_HOME/deploy/update-from-github.sh"
+
+# Ensure runtime dirs exist and are writable by the service user
+install -d -o "$GRATIFY_USER" -g "$GRATIFY_USER" \
+  "$GRATIFY_HOME/WasteManagement/images" \
+  "$GRATIFY_HOME/AdsManagement/videos"
 
 render() {
   local src="$1"
@@ -74,6 +110,7 @@ render() {
     -e "s|@GRATIFY_HOME@|$GRATIFY_HOME|g" \
     -e "s|@GRATIFY_USER@|$GRATIFY_USER|g" \
     -e "s|@CONDA_PYTHON@|$CONDA_PYTHON|g" \
+    -e "s|@USER_HOME@|$USER_HOME|g" \
     "$src" > "$dest"
 }
 
@@ -86,11 +123,20 @@ render "$SCRIPT_DIR/systemd/gratify-waste.service" "$SYSTEMD_DIR/gratify-waste.s
 
 systemctl daemon-reload
 systemctl enable "${SERVICES[@]}"
-systemctl restart gratify-update.service
+
+# Ensure graphical target is default so ads can start on a Pi desktop image
+if systemctl list-unit-files graphical.target &>/dev/null; then
+  current="$(systemctl get-default || true)"
+  if [[ "$current" != "graphical.target" ]]; then
+    echo "NOTE: default target is '$current' (ads need graphical.target + desktop autologin)"
+  fi
+fi
+
+systemctl restart gratify-update.service || true
 systemctl restart gratify-garbage.service gratify-ads.service gratify-waste.service
 
 echo ""
-echo "Done. Services enabled and started (conda env: $CONDA_ENV_NAME)."
-echo "Boot order: update-from-github → garbage + ads + waste"
+echo "Done. Services enabled and started."
+echo "Boot order: update-from-github → garbage + ads + waste (ML loads with garbage)"
 echo "  sudo systemctl status gratify-update gratify-garbage gratify-ads gratify-waste"
-echo "  journalctl -u gratify-update -f"
+echo "  journalctl -u gratify-garbage -f"

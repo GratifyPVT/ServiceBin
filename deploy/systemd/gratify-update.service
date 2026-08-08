@@ -9,6 +9,8 @@ RemainAfterExit=yes
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
+Environment=HOME=@USER_HOME@
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh update 120 0
 ExecStart=@GRATIFY_HOME@/deploy/update-from-github.sh
 TimeoutStartSec=180

@@ -1,7 +1,9 @@
 [Unit]
 Description=Gratify Garbage Detection (Arduino UART + ML)
 After=network-online.target gratify-update.service
-Wants=network-online.target gratify-update.service
+Wants=network-online.target
+After=gratify-update.service
+Wants=gratify-update.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -9,12 +11,14 @@ Type=simple
 User=@GRATIFY_USER@
 Group=@GRATIFY_USER@
 WorkingDirectory=@GRATIFY_HOME@
+Environment=HOME=@USER_HOME@
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh garbage 60 15
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=@GRATIFY_HOME@/deploy/wait-for-boot.sh garbage 60 90
 ExecStart=@CONDA_PYTHON@ -m GarbageDetection.main
 Restart=always
 RestartSec=10
-TimeoutStartSec=120
+TimeoutStartSec=180
 SupplementaryGroups=dialout video
 
 [Install]

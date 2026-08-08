@@ -53,7 +53,7 @@ gratify/
 │   ├── main.py               # Main detection loop
 │   ├── classifier.py         # TFLite inference
 │   ├── runtime.py            # Serial + camera helpers
-│   └── model/                # *.tflite models
+│   └── model/                # *.tflite models (required on Pi)
 ├── WasteManagement/
 │   ├── uploader.py           # Batch image uploader
 │   └── images/               # Captured photos (handoff folder)
